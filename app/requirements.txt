@@ -1,5 +1,5 @@
 fastapi==0.139.1
 uvicorn==0.34.0
-python-multipart==0.0.20
+python-multipart==0.0.30
 PyYAML==6.0.2
 Pillow==13.0.0
