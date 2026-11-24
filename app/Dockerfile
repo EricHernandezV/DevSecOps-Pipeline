@@ -1,8 +1,9 @@
 # ── Deliberately old base image (triggers Trivy container scan) ───────────────
 # python:3.8-slim reached end-of-life in October 2024.
 # The image contains numerous unpatched OS-level CVEs.
-FROM python:3.8-slim
+FROM python:3.12-slim
 
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Install dependencies
