@@ -110,7 +110,7 @@ jobs:
         with:
           target: 'http://localhost:8000'
           fail_action: 'high'
-          allow_issue_creation: false
+          allow_issue_writing: false
           cmd_options: '-j'
 
       - name: Upload ZAP Report
