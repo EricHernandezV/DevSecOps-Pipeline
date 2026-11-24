@@ -6,10 +6,13 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+# Permisos para publicar resultados de seguridad en GitHub
 permissions:
   security-events: write
 
 jobs:
+
+  # ETAPA 1: Construcción de la imagen Docker
   Build:
     runs-on: ubuntu-latest
     steps:
@@ -28,6 +31,7 @@ jobs:
           name: vuln-app-image
           path: vuln-app.tar
 
+  # ETAPA 2: Análisis estático de código (SAST)
   SonarQube-SAST:
     runs-on: ubuntu-latest
     needs: Build
@@ -42,7 +46,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # PUERTA DE SEGURIDAD SAST:
+        # Espera el resultado del Quality Gate.
+        # Si está FAILED, este trabajo debe fallar.
+        with:
+          args: >
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300
 
+  # ETAPA 3: Análisis de vulnerabilidades de imagen y dependencias (SCA)
   Container-Image-Scan:
     runs-on: ubuntu-latest
     needs: Build
@@ -55,6 +67,7 @@ jobs:
       - name: Load image into Docker
         run: docker load -i vuln-app.tar
 
+      # Genera el informe SARIF con todas las severidades
       - name: Generate Trivy SARIF report
         uses: aquasecurity/trivy-action@v0.35.0
         with:
@@ -64,6 +77,8 @@ jobs:
           severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
           exit-code: 0
 
+      # PUERTA DE SEGURIDAD SCA:
+      # Bloquea el trabajo si encuentra vulnerabilidades CRITICAL
       - name: Block pipeline if CRITICAL vulnerabilities exist
         uses: aquasecurity/trivy-action@v0.35.0
         with:
@@ -72,12 +87,14 @@ jobs:
           severity: 'CRITICAL'
           exit-code: 1
 
+      # Publica el informe en la sección de seguridad de GitHub
       - name: Upload results to GitHub security
         uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-results.sarif
 
+  # ETAPA 4: Análisis dinámico de la aplicación (DAST)
   ZAP-DAST:
     runs-on: ubuntu-latest
     needs: [SonarQube-SAST, Container-Image-Scan]
@@ -91,9 +108,11 @@ jobs:
       - name: Load image into Docker
         run: docker load -i vuln-app.tar
 
+      # Inicia la aplicación vulnerable para realizar el análisis
       - name: Start vulnerable app
         run: docker run -d --name vuln-app --network host vuln-app
 
+      # Comprueba que la aplicación esté disponible antes del escaneo
       - name: Wait for app to be ready
         run: |
           echo "Waiting for app to become available on port 8000..."
@@ -109,6 +128,8 @@ jobs:
           docker logs vuln-app
           exit 1
 
+      # PUERTA DE SEGURIDAD DAST:
+      # Configura el escaneo para reportar alertas de severidad HIGH
       - name: Run OWASP ZAP Baseline Scan
         uses: zaproxy/action-full-scan@v0.13.0
         with:
@@ -117,6 +138,7 @@ jobs:
           allow_issue_writing: false
           cmd_options: '-j'
 
+      # Guarda el informe HTML como artefacto de GitHub Actions
       - name: Upload ZAP Report
         uses: actions/upload-artifact@v4
         if: always()
